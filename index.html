@@ -118,7 +118,7 @@
                     <video controls playsinline poster="https://i.imgur.com/hetJcjS.jpeg">
                         <!-- 
                             IMPORTANT: 
-                            1. Ensure "EngagementInvitationT&B.mp4" is in the same folder as this file.
+                            1. Ensure "EngagementInvitationB&T.mp4" is in the same folder as this file.
                         -->
                         <source src="EngagementInvitationB&T.mp4" type="video/mp4">
                         Your browser does not support the video tag.
@@ -276,23 +276,61 @@
         <p class="font-sans text-xs text-stone-400 mt-2">Can't wait to celebrate with you!</p>
     </footer>
 
-    <!-- LOGIC with FIREBASE (REALTIME DATABASE) -->
+    <!-- SCRIPT 1: VISUAL UI (Loads instantly, ignores browser security blocks) -->
+    <script>
+        // 1. RSVP HOSTS
+        const RSVP_HOSTS = [
+            { name: "Bhavisha Morjaria", phone: "254782523738" },
+            { name: "Manisha Morjaria", phone: "254738749437" }
+        ];
+
+        document.addEventListener("DOMContentLoaded", () => {
+            // Populate Dropdown
+            const hostSelector = document.getElementById('hostSelector');
+            RSVP_HOSTS.forEach(host => {
+                const option = document.createElement('option');
+                option.value = host.phone;
+                option.textContent = host.name;
+                hostSelector.appendChild(option);
+            });
+
+            // Handle Attendance Toggles visually
+            const radioButtons = document.querySelectorAll('input[name="attendance"]');
+            const guestCountDiv = document.getElementById('guestCountDiv');
+
+            radioButtons.forEach(radio => {
+                radio.addEventListener('change', (e) => {
+                    if (e.target.value === 'Regretfully Decline') {
+                        guestCountDiv.style.opacity = '0.5';
+                        guestCountDiv.style.pointerEvents = 'none';
+                    } else {
+                        guestCountDiv.style.opacity = '1';
+                        guestCountDiv.style.pointerEvents = 'auto';
+                    }
+                });
+            });
+
+            // Set up a Fallback warning if the Database gets blocked by the browser
+            window.fallbackSubmit = function(e) {
+                e.preventDefault();
+                if (window.location.protocol === 'file:') {
+                    alert("⚠️ DATABASE BLOCKED\n\nBecause you opened this file directly from your computer, your web browser blocked the database connection for security reasons.\n\nTo make the Database and WhatsApp work properly, you must host this file online (e.g., upload it to Netlify, Vercel, or GitHub Pages) and open the web link!");
+                } else {
+                    alert("The database is still loading or failed to connect. Please check your internet connection.");
+                }
+            };
+
+            // Attach fallback initially (will be removed if Database loads successfully)
+            document.getElementById('rsvpForm').addEventListener('submit', window.fallbackSubmit);
+        });
+    </script>
+
+    <!-- SCRIPT 2: DATABASE LOGIC (Will execute correctly when the file is hosted online) -->
     <script type="module">
-        // Import Firebase - Note: Switched to firebase-database.js
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
         import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { getDatabase, ref, push, serverTimestamp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-database.js";
 
-        // --- CONFIGURATION ---
-        
-        // 1. RSVP HOSTS
-        // Format: CountryCode + Number (No + sign, no spaces)
-        const RSVP_HOSTS = [
-            { name: "Bhavisha Morjaria", phone: "254782523738" },
-            {name: "Manisha Morjaria", phone:"254738749437"}
-        ];
-
-        // 2. FIREBASE CONFIGURATION
         const firebaseConfig = {
             apiKey: "AIzaSyBnxHTEDqwxRcI0ZtvUj03J5ncWUHnxhUc",
             authDomain: "engagement-rsvp-3de4e.firebaseapp.com",
@@ -307,7 +345,7 @@
         // Initialize Firebase
         const app = initializeApp(firebaseConfig);
         const auth = getAuth(app);
-        const db = getDatabase(app); // REALTIME DATABASE
+        const db = getDatabase(app); 
 
         // UI References
         const form = document.getElementById('rsvpForm');
@@ -318,15 +356,9 @@
         const successModal = document.getElementById('successModal');
         const whatsappBtn = document.getElementById('whatsappBtn');
 
-        // Populate Host Dropdown
-        RSVP_HOSTS.forEach(host => {
-            const option = document.createElement('option');
-            option.value = host.phone;
-            option.textContent = host.name;
-            hostSelector.appendChild(option);
-        });
+        // Since this module loaded successfully, remove the fallback error!
+        form.removeEventListener('submit', window.fallbackSubmit);
 
-        // Toggle UI Helper
         function setLoading(isLoading) {
             if (isLoading) {
                 submitBtn.disabled = true;
@@ -341,31 +373,25 @@
             }
         }
 
-        // Handle Form Submit
         form.addEventListener('submit', async function(e) {
             e.preventDefault();
 
-            // 1. Get Selected Host Phone
             const selectedPhone = hostSelector.value;
             const selectedHostName = hostSelector.options[hostSelector.selectedIndex].text;
 
-            // REMOVED: Blocking validation logic for real numbers
-            // We trust the user put in correct numbers in the config array above.
-
             setLoading(true);
 
-            // 3. Get Form Values
             const name = document.getElementById('guestName').value;
             const attendance = document.querySelector('input[name="attendance"]:checked').value;
             const count = document.getElementById('guestCount').value;
 
             try {
-                // 4. Authenticate Anonymously (Required for Database access)
+                // Authenticate
                 if (!auth.currentUser) {
                     await signInAnonymously(auth);
                 }
 
-                // 5. Save to Realtime Database
+                // Save to Realtime Database
                 const rsvpData = {
                     name: name,
                     attendance: attendance,
@@ -375,15 +401,14 @@
                     userAgent: navigator.userAgent
                 };
 
-                // Pushing to 'rsvps' node
                 await push(ref(db, 'rsvps'), rsvpData);
 
-                // 6. Success! Show Modal
+                // Success! Show Modal
                 setLoading(false);
                 successModal.classList.remove('hidden');
                 successModal.classList.add('flex');
 
-                // 7. Prepare WhatsApp Button inside Modal
+                // Prepare WhatsApp Button
                 let message = "";
                 if (attendance === "Joyfully Accept") {
                     message = `Hi ${selectedHostName}! 👋 I'd love to attend the Engagement Ceremony! \n\n🤵 Name: ${name}\n👥 Total Guests: ${count}`;
@@ -391,34 +416,16 @@
                     message = `Hi ${selectedHostName}! 👋 Thank you for the invite. Unfortunately, ${name} won't be able to make it. Sending my love! ❤️`;
                 }
                 
-                // Configure the button to open WhatsApp when clicked
                 whatsappBtn.onclick = function() {
                     const waLink = `https://wa.me/${selectedPhone}?text=${encodeURIComponent(message)}`;
-                    window.location.href = waLink; // More reliable than window.open on mobile
+                    window.location.href = waLink; 
                 };
 
             } catch (error) {
                 console.error("Error saving RSVP:", error);
                 setLoading(false);
-                // IMPROVED ERROR HANDLING
                 alert("Firebase Error: " + error.message + "\n\nStep-by-Step Fix:\n1. Go to Firebase Console -> Authentication\n2. Click 'Sign-in method' -> Enable 'Anonymous'\n3. Go to Realtime Database -> Rules\n4. Update the rules with the JSON provided in the chat.");
             }
-        });
-
-        // Toggle Visibility Logic
-        const radioButtons = document.querySelectorAll('input[name="attendance"]');
-        const guestCountDiv = document.getElementById('guestCountDiv');
-
-        radioButtons.forEach(radio => {
-            radio.addEventListener('change', (e) => {
-                if (e.target.value === 'Regretfully Decline') {
-                    guestCountDiv.style.opacity = '0.5';
-                    guestCountDiv.style.pointerEvents = 'none';
-                } else {
-                    guestCountDiv.style.opacity = '1';
-                    guestCountDiv.style.pointerEvents = 'auto';
-                }
-            });
         });
     </script>
 </body>
